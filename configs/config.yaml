@@ -1,17 +1,17 @@
+
 experiment:
-  name: "high_precision_benchmark_v1"
+  name: "Data Processing Performance Benchmark"
   version: "1.0.0"
-  seed: 42
-  execution_timeout: 120
+
 input_data:
   sample_path: "data/sample/test_data.csv"
-  format: "csv"
   encoding: "utf-8"
+
 benchmark_params:
   iterations: 100
   warmup_runs: 5
   aggregation_target: "category"
   metric_target: "transaction_amount"
+
 logging:
   output_file: "benchmark_results.log"
-  log_level: "INFO"
