@@ -41,6 +41,7 @@ def measure(method, df, category, metric, iterations):
             elapsed = (time.perf_counter() - start) * 1000
 
             current, peak = tracemalloc.get_traced_memory()
+
             times.append(elapsed)
             peak_memory = max(peak_memory, peak)
 
@@ -56,14 +57,25 @@ def measure(method, df, category, metric, iterations):
 
 
 def run_benchmark():
-    with open("configs/config.yaml", "r", encoding="utf-8") as f:
+    config_path = "configs/config.yaml"
+
+    if not os.path.isfile(config_path):
+        raise FileNotFoundError(
+            f"Config file not found: {config_path}"
+        )
+
+    with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     data_path = config["input_data"]["sample_path"]
+    encoding = config["input_data"]["encoding"]
+
     category = config["benchmark_params"]["aggregation_target"]
     metric = config["benchmark_params"]["metric_target"]
+
     iterations = config["benchmark_params"]["iterations"]
     warmups = config["benchmark_params"]["warmup_runs"]
+
     output_file = config["logging"]["output_file"]
 
     if iterations < 1 or warmups < 0:
@@ -76,7 +88,10 @@ def run_benchmark():
             f"Data file not found: {data_path}"
         )
 
-    df = pd.read_csv(data_path)
+    df = pd.read_csv(data_path, encoding=encoding)
+
+    if df.empty:
+        raise ValueError("The CSV file contains no data")
 
     if category not in df.columns or metric not in df.columns:
         raise ValueError(
@@ -84,7 +99,9 @@ def run_benchmark():
         )
 
     if not pd.api.types.is_numeric_dtype(df[metric]):
-        raise ValueError(f"Column '{metric}' must contain numeric data")
+        raise ValueError(
+            f"Column '{metric}' must contain numeric data"
+        )
 
     if df[category].isna().any() or df[metric].isna().any():
         raise ValueError(
@@ -132,6 +149,8 @@ def run_benchmark():
     summary = f"""
 BENCHMARK RESULTS
 =================
+Experiment: {config['experiment']['name']}
+Version: {config['experiment']['version']}
 Rows processed: {len(df)}
 Iterations: {iterations}
 Warm-up runs: {warmups}
