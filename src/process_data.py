@@ -1,154 +1,178 @@
+
+import json
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+import numpy as np
 
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
-sns.set_theme(style="whitegrid")
 
-PALETTE = sns.color_palette("colorblind")
+def bootstrap_ci(values, n_boot=2000):
+
+    values = np.asarray(values, dtype=float)
+
+    rng = np.random.default_rng(42)
+
+    bootstrap_medians = []
+
+    for _ in range(n_boot):
+
+        sample = rng.choice(
+            values,
+            size=len(values),
+            replace=True
+        )
+
+        bootstrap_medians.append(np.median(sample))
+
+    lower = np.percentile(bootstrap_medians, 2.5)
+    upper = np.percentile(bootstrap_medians, 97.5)
+
+    return lower, upper
 
 
-def generate_plots(summary_csv_path, raw_jsonl_path, output_dir):
+def process_benchmark_data(input_path, output_path):
 
-    # Read processed and raw data
-    summary = pd.read_csv(summary_csv_path)
+    input_path = Path(input_path)
 
-    raw = pd.read_json(raw_jsonl_path, lines=True)
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Raw data not found: {input_path}"
+        )
 
-    # Keep only successful evaluation measurements
-    raw = raw[
-        (raw["phase"] == "evaluation") &
-        (raw["success"] == True)
+    # Read JSONL line by line
+    records = []
+
+    with open(input_path, "r", encoding="utf-8") as file:
+
+        for line_number, line in enumerate(file, start=1):
+
+            if not line.strip():
+                continue
+
+            try:
+                records.append(json.loads(line))
+
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    f"Invalid JSON on line {line_number}: {error}"
+                )
+
+    if not records:
+        raise ValueError("The raw JSONL file is empty.")
+
+    df = pd.DataFrame(records)
+
+    required = [
+        "method",
+        "phase",
+        "latency_ms",
+        "throughput_rps",
+        "peak_memory_mb",
+        "success"
+    ]
+
+    for column in required:
+
+        if column not in df.columns:
+            raise ValueError(
+                f"Missing required column: {column}"
+            )
+
+    # Remove warm-up measurements
+    df_eval = df[
+        df["phase"] == "evaluation"
     ].copy()
 
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if df_eval.empty:
+        raise ValueError("No evaluation measurements found.")
 
-    methods = summary["method"].tolist()
+    results = []
 
-    # -----------------------------------
-    # FIGURE 1: Latency comparison with 95% CI
-    # -----------------------------------
+    for method, group in df_eval.groupby("method"):
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+        total_runs = len(group)
 
-    x_positions = range(len(methods))
+        successful = group[
+            group["success"].astype(bool)
+        ].copy()
 
-    medians = summary["latency_median_ms"].values
+        failed_runs = total_runs - len(successful)
 
-    lower_errors = (
-        medians - summary["median_ci_lower_ms"].values
+        error_rate = failed_runs / total_runs * 100
+
+        if successful.empty:
+            raise ValueError(
+                f"No successful runs for {method}"
+            )
+
+        latency = successful["latency_ms"].astype(float)
+
+        throughput = successful["throughput_rps"].astype(float)
+
+        memory = successful["peak_memory_mb"].astype(float)
+
+        ci_lower, ci_upper = bootstrap_ci(latency)
+
+        results.append({
+
+            "method": method,
+
+            "total_runs": total_runs,
+            "successful_runs": len(successful),
+            "failed_runs": failed_runs,
+            "error_rate_pct": error_rate,
+
+            "latency_mean": latency.mean(),
+            "latency_std": latency.std(),
+
+            "latency_median": latency.median(),
+            "latency_p95": np.percentile(latency, 95),
+            "latency_p99": np.percentile(latency, 99),
+
+            "latency_ci_lower": ci_lower,
+            "latency_ci_upper": ci_upper,
+
+            "throughput_mean": throughput.mean(),
+            "memory_mean_mb": memory.mean()
+
+        })
+
+    summary = pd.DataFrame(results)
+
+    output_path = Path(output_path)
+
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True
     )
 
-    upper_errors = (
-        summary["median_ci_upper_ms"].values - medians
+    summary.to_csv(
+        output_path,
+        index=False
     )
 
-    ax.errorbar(
-        x_positions,
-        medians,
-        yerr=[lower_errors, upper_errors],
-        fmt="o",
-        color=PALETTE[0],
-        ecolor=PALETTE[1],
-        capsize=7,
-        markersize=9,
-        elinewidth=2,
-        markeredgewidth=1.5
-    )
+    print("Statistical analysis completed.")
+    print("\nResults:")
 
-    ax.set_xticks(list(x_positions))
-    ax.set_xticklabels(methods)
+    print(summary.round(3).to_string(index=False))
 
-    ax.set_title(
-        "Execution Latency Comparison with 95% CI"
-    )
+    print("\nSaved to:", output_path)
 
-    ax.set_xlabel("Processing Method")
-    ax.set_ylabel("Median Latency (ms)")
-
-    ax.grid(
-        True,
-        linestyle="--",
-        alpha=0.5
-    )
-
-    fig.tight_layout()
-
-    fig.savefig(
-        output_dir / "fig1_latency_comparison.png",
-        dpi=300,
-        bbox_inches="tight"
-    )
-
-    fig.savefig(
-        output_dir / "fig1_latency_comparison.pdf",
-        bbox_inches="tight"
-    )
-
-    plt.show()
-    plt.close(fig)
-
-    # -----------------------------------
-    # FIGURE 2: Latency Distribution Boxplot
-    # -----------------------------------
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-
-    sns.boxplot(
-        data=raw,
-        x="method",
-        y="latency_ms",
-        hue="method",
-        palette=PALETTE,
-        dodge=False,
-        showfliers=True,
-        legend=False,
-        ax=ax
-    )
-
-    ax.set_title(
-        "Latency Distribution by Processing Method"
-    )
-
-    ax.set_xlabel("Processing Method")
-    ax.set_ylabel("Latency (ms)")
-
-    ax.grid(
-        True,
-        axis="y",
-        linestyle="--",
-        alpha=0.5
-    )
-
-    fig.tight_layout()
-
-    fig.savefig(
-        output_dir / "fig2_distribution_boxplot.png",
-        dpi=300,
-        bbox_inches="tight"
-    )
-
-    fig.savefig(
-        output_dir / "fig2_distribution_boxplot.pdf",
-        bbox_inches="tight"
-    )
-
-    plt.show()
-    plt.close(fig)
-
-    print("Both figures generated successfully!")
-    print(f"Figures saved to: {output_dir}")
+    return summary
 
 
 if __name__ == "__main__":
 
-    generate_plots(
-        ROOT / "data" / "processed" / "metrics_summary.csv",
-        ROOT / "data" / "raw" / "test_run.jsonl",
-        ROOT / "reports" / "figures"
+    input_path = ROOT / "data" / "raw" / "test_run.jsonl"
+
+    output_path = (
+        ROOT / "data" / "processed" / "metrics_summary.csv"
+    )
+
+    process_benchmark_data(
+        input_path,
+        output_path
     )

@@ -5,7 +5,7 @@
 
 - **Project Title:** Performance Benchmarking of Data Processing Algorithms
 - **Author:** Bakdaulet Maulen
-- **Repository:** https://github.com/BakdauletMaulen/performance-benchmarking-project
+- **Repository:** https://github.com/TilderCourse2025/performance-benchmarking-project
 
 ## Abstract
 
@@ -47,8 +47,10 @@ performance-benchmarking-project/
 │   └── figures/
 │       ├── fig1_latency_comparison.png
 │       ├── fig1_latency_comparison.pdf
-│       ├── fig2_distribution_boxplot.png
-│       └── fig2_distribution_boxplot.pdf
+│       ├── fig1_latency_vs_load.png
+│       ├── fig1_latency_vs_load.pdf
+│       ├── fig2_latency_distribution.png
+│       └── fig2_latency_distribution.pdf
 │
 ├── src/
 │   ├── benchmark.py
@@ -64,10 +66,10 @@ performance-benchmarking-project/
 
 ## Experimental Methodology
 
-The experiment compares two processing methods:
+The experiment compares two data processing methods:
 
-1. **Baseline Method** – the original data processing implementation.
-2. **Optimized Method** – the improved implementation using algorithmic optimizations.
+1. **Baseline Method** – the original data processing implementation using Pandas groupby and concat.
+2. **Optimized Method** – the improved implementation using Pandas groupby with aggregation.
 
 ### Experimental Configuration
 
@@ -88,12 +90,12 @@ Only successful evaluation measurements are used for latency, throughput, and me
 
 ## Performance Metrics
 
-The following metrics are used:
+The following performance metrics are used:
 
-- **Latency (ms):** Time required to process data.
+- **Latency (ms):** Time required to complete one benchmark execution.
 - **Throughput (RPS):** Number of processing operations per second.
 - **Memory Usage (MB):** Average peak memory usage.
-- **Error Rate (%):** Percentage of failed measurements.
+- **Error Rate (%):** Percentage of failed benchmark executions.
 - **Speedup:** Ratio of baseline median latency to optimized median latency.
 - **95% Confidence Interval:** Bootstrap confidence interval for median latency.
 
@@ -101,7 +103,7 @@ The following metrics are used:
 
 ### 1. Statistical Summary
 
-The following table presents the experimental results obtained from the benchmark evaluation.
+The following table presents the experimental results obtained from 200 successful evaluation measurements.
 
 | Metric | Baseline Method | Optimized Method |
 |---|---:|---:|
@@ -117,9 +119,9 @@ The following table presents the experimental results obtained from the benchmar
 
 ### 2. Latency Comparison with 95% Confidence Interval
 
-The median latency was compared using a bootstrap confidence interval with 2,000 resampling iterations.
+The median latency was compared using bootstrap resampling with 2,000 iterations.
 
-| Method | Median (ms) | 95% CI |
+| Method | Median (ms) | 95% Confidence Interval |
 |---|---:|---:|
 | Baseline | 2.571 | [2.490, 2.631] |
 | Optimized | 1.995 | [1.966, 2.016] |
@@ -137,32 +139,34 @@ The boxplot illustrates the distribution of execution latency across successful 
 
 **Latency Distribution Figures:**
 
-- [Open Latency Distribution Plot (PNG)](reports/figures/fig2_distribution_boxplot.png)
-- [Open Latency Distribution Plot (PDF)](reports/figures/fig2_distribution_boxplot.pdf)
+- [Open Latency Distribution Plot (PNG)](reports/figures/fig2_latency_distribution.png)
+- [Open Latency Distribution Plot (PDF)](reports/figures/fig2_latency_distribution.pdf)
 
 The optimized method demonstrates a lower median latency and a narrower interquartile range, indicating more consistent execution times in this experiment.
 
 ### 4. Performance Improvement
 
-The speedup is calculated as:
+Speedup is calculated using median latency:
 
 ```text
 Speedup = Baseline Median Latency / Optimized Median Latency
 
-Speedup = 2.571 / 1.995 = 1.2886
+Speedup = 2.571 / 1.995
+
+Speedup = 1.2886 ≈ 1.29x
 ```
 
 The optimized method achieved approximately **1.29x speedup** compared with the baseline method.
 
 The median latency reduction is approximately **22.4%**.
 
-Throughput increased, while average memory usage decreased.
+Throughput increased from 3086.250 RPS to 3883.861 RPS, while average memory usage decreased from 0.015 MB to 0.012 MB.
 
-Both methods recorded a 0% error rate during the evaluation measurements.
+Both methods recorded a 0% observed error rate during the evaluation measurements.
 
 ### 5. Research Conclusion
 
-The experimental results indicate that the optimized data processing method outperformed the baseline implementation.
+The experimental results indicate that the optimized data processing method outperformed the baseline implementation under the tested conditions.
 
 The optimized method demonstrated:
 
@@ -171,7 +175,7 @@ The optimized method demonstrated:
 - Lower average memory usage.
 - A 0% observed error rate.
 
-These findings support the effectiveness of the implemented optimization under the tested experimental conditions.
+These findings support the effectiveness of the implemented optimization in this experiment.
 
 However, the results are limited to the current dataset and hardware environment. Further experiments with larger datasets and different hardware configurations would be useful to validate the findings.
 
@@ -205,7 +209,7 @@ python src/visualize.py
 
 ### Step 4: Data Analysis
 
-Open and run:
+Open and run the following Jupyter Notebook:
 
 ```text
 notebooks/01_data_analysis.ipynb

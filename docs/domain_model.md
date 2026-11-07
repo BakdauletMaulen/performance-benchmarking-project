@@ -93,19 +93,6 @@ Where:
 - $L_{optimized}$ — optimized method latency.
 
 A speedup greater than 1 indicates that the optimized method is faster.
-### 3.5 Memory Usage
-
-Memory usage represents the amount of memory consumed during benchmark execution.
-
-It is measured using the peak memory value recorded during each execution.
-
-**Unit:** Megabytes (MB).
-
-### 3.6 Warm-up Measurements
-
-Warm-up executions are performed before evaluation to reduce the effect of initialization and startup overhead.
-
-Warm-up measurements are excluded from the final statistical analysis.
 
 ## 4. Statistical Metrics
 

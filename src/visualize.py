@@ -1,3 +1,4 @@
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -14,7 +15,6 @@ PALETTE = sns.color_palette("colorblind")
 
 def generate_plots(summary_csv_path, raw_jsonl_path, output_dir):
 
-    # Read processed and raw data
     summary = pd.read_csv(summary_csv_path)
 
     raw = pd.read_json(raw_jsonl_path, lines=True)
@@ -26,6 +26,7 @@ def generate_plots(summary_csv_path, raw_jsonl_path, output_dir):
     ].copy()
 
     output_dir = Path(output_dir)
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     methods = summary["method"].tolist()
@@ -38,7 +39,6 @@ def generate_plots(summary_csv_path, raw_jsonl_path, output_dir):
 
     x_positions = range(len(methods))
 
-    # Use column names from process_data.py
     medians = summary["latency_median"].values
 
     lower_errors = (
@@ -70,24 +70,20 @@ def generate_plots(summary_csv_path, raw_jsonl_path, output_dir):
     )
 
     ax.set_xlabel("Processing Method")
-    ax.set_ylabel("Median Latency (ms)")
+    ax.set_ylabel("Latency (ms)")
 
-    ax.grid(
-        True,
-        linestyle="--",
-        alpha=0.5
-    )
+    ax.grid(True, linestyle="--", alpha=0.5)
 
     fig.tight_layout()
 
     fig.savefig(
-        output_dir / "fig1_latency_comparison.png",
+        output_dir / "fig1_latency_vs_load.png",
         dpi=300,
         bbox_inches="tight"
     )
 
     fig.savefig(
-        output_dir / "fig1_latency_comparison.pdf",
+        output_dir / "fig1_latency_vs_load.pdf",
         bbox_inches="tight"
     )
 
@@ -142,7 +138,7 @@ def generate_plots(summary_csv_path, raw_jsonl_path, output_dir):
     plt.show()
     plt.close(fig)
 
-    print("Both figures generated successfully!")
+    print("Both figures generated successfully.")
     print(f"Figures saved to: {output_dir}")
 
 
