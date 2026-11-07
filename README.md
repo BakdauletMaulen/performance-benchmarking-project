@@ -124,6 +124,10 @@ The median latency was compared using a bootstrap confidence interval with 2,000
 | Baseline | 2.571 | [2.490, 2.631] |
 | Optimized | 1.995 | [1.966, 2.016] |
 
+**Latency Comparison Figures:**
+
+- [Open Latency Comparison Plot (PNG)](reports/figures/fig1_latency_comparison.png)
+- [Open Latency Comparison Plot (PDF)](reports/figures/fig1_latency_comparison.pdf)
 
 The optimized method achieved a lower median execution latency than the baseline method.
 
@@ -131,7 +135,10 @@ The optimized method achieved a lower median execution latency than the baseline
 
 The boxplot illustrates the distribution of execution latency across successful evaluation measurements.
 
+**Latency Distribution Figures:**
 
+- [Open Latency Distribution Plot (PNG)](reports/figures/fig2_distribution_boxplot.png)
+- [Open Latency Distribution Plot (PDF)](reports/figures/fig2_distribution_boxplot.pdf)
 
 The optimized method demonstrates a lower median latency and a narrower interquartile range, indicating more consistent execution times in this experiment.
 
@@ -139,9 +146,11 @@ The optimized method demonstrates a lower median latency and a narrower interqua
 
 The speedup is calculated as:
 
+```text
 Speedup = Baseline Median Latency / Optimized Median Latency
 
 Speedup = 2.571 / 1.995 = 1.2886
+```
 
 The optimized method achieved approximately **1.29x speedup** compared with the baseline method.
 
