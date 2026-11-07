@@ -38,14 +38,15 @@ def generate_plots(summary_csv_path, raw_jsonl_path, output_dir):
 
     x_positions = range(len(methods))
 
-    medians = summary["latency_median_ms"].values
+    # Use column names from process_data.py
+    medians = summary["latency_median"].values
 
     lower_errors = (
-        medians - summary["median_ci_lower_ms"].values
+        medians - summary["latency_ci_lower"].values
     )
 
     upper_errors = (
-        summary["median_ci_upper_ms"].values - medians
+        summary["latency_ci_upper"].values - medians
     )
 
     ax.errorbar(
