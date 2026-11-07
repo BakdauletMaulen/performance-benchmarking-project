@@ -1,4 +1,5 @@
 
+import json
 import pandas as pd
 import numpy as np
 
@@ -8,21 +9,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def bootstrap_ci(values, confidence=0.95, n_boot=2000):
-    """
-    Calculates bootstrap confidence interval for the median.
-    """
+def bootstrap_ci(values, n_boot=2000):
 
     values = np.asarray(values, dtype=float)
-
-    if len(values) < 2:
-        return np.nan, np.nan
 
     rng = np.random.default_rng(42)
 
     bootstrap_medians = []
 
     for _ in range(n_boot):
+
         sample = rng.choice(
             values,
             size=len(values),
@@ -31,82 +27,106 @@ def bootstrap_ci(values, confidence=0.95, n_boot=2000):
 
         bootstrap_medians.append(np.median(sample))
 
-    alpha = 1 - confidence
-
-    lower = np.percentile(
-        bootstrap_medians, alpha / 2 * 100
-    )
-
-    upper = np.percentile(
-        bootstrap_medians, (1 - alpha / 2) * 100
-    )
+    lower = np.percentile(bootstrap_medians, 2.5)
+    upper = np.percentile(bootstrap_medians, 97.5)
 
     return lower, upper
 
 
 def process_benchmark_data(input_path, output_path):
 
-    # 1. Load raw benchmark data
-    df = pd.read_json(input_path, lines=True)
+    input_path = Path(input_path)
 
-    if df.empty:
-        raise ValueError("Raw benchmark file is empty")
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Raw data not found: {input_path}"
+        )
+
+    # Read JSONL line by line
+    records = []
+
+    with open(input_path, "r", encoding="utf-8") as file:
+
+        for line_number, line in enumerate(file, start=1):
+
+            if not line.strip():
+                continue
+
+            try:
+                records.append(json.loads(line))
+
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    f"Invalid JSON on line {line_number}: {error}"
+                )
+
+    if not records:
+        raise ValueError("The raw JSONL file is empty.")
+
+    df = pd.DataFrame(records)
 
     required = [
         "method",
         "phase",
         "latency_ms",
         "throughput_rps",
+        "peak_memory_mb",
         "success"
     ]
 
     for column in required:
-        if column not in df.columns:
-            raise ValueError(f"Missing column: {column}")
 
-    # 2. Remove warm-up measurements
-    df_eval = df[df["phase"] == "evaluation"].copy()
+        if column not in df.columns:
+            raise ValueError(
+                f"Missing required column: {column}"
+            )
+
+    # Remove warm-up measurements
+    df_eval = df[
+        df["phase"] == "evaluation"
+    ].copy()
 
     if df_eval.empty:
-        raise ValueError("No evaluation measurements found")
+        raise ValueError("No evaluation measurements found.")
 
     results = []
 
-    # 3. Calculate statistics for each method
     for method, group in df_eval.groupby("method"):
 
         total_runs = len(group)
 
-        failed_runs = (~group["success"].astype(bool)).sum()
+        successful = group[
+            group["success"].astype(bool)
+        ].copy()
+
+        failed_runs = total_runs - len(successful)
 
         error_rate = failed_runs / total_runs * 100
 
-        # Use only successful measurements
-        valid = group[group["success"].astype(bool)].copy()
-
-        valid = valid.dropna(subset=["latency_ms"])
-
-        if valid.empty:
+        if successful.empty:
             raise ValueError(
-                f"No successful measurements for {method}"
+                f"No successful runs for {method}"
             )
 
-        latency = valid["latency_ms"].astype(float)
+        latency = successful["latency_ms"].astype(float)
 
-        throughput = valid["throughput_rps"].astype(float)
+        throughput = successful["throughput_rps"].astype(float)
 
-        # Median confidence interval
+        memory = successful["peak_memory_mb"].astype(float)
+
         ci_lower, ci_upper = bootstrap_ci(latency)
 
         results.append({
+
             "method": method,
+
             "total_runs": total_runs,
-            "successful_runs": len(valid),
-            "failed_runs": int(failed_runs),
+            "successful_runs": len(successful),
+            "failed_runs": failed_runs,
             "error_rate_pct": error_rate,
 
             "latency_mean": latency.mean(),
-            "latency_std": latency.std(ddof=1),
+            "latency_std": latency.std(),
 
             "latency_median": latency.median(),
             "latency_p95": np.percentile(latency, 95),
@@ -116,13 +136,12 @@ def process_benchmark_data(input_path, output_path):
             "latency_ci_upper": ci_upper,
 
             "throughput_mean": throughput.mean(),
-            "throughput_std": throughput.std(ddof=1)
+            "memory_mean_mb": memory.mean()
+
         })
 
-    # 4. Create summary DataFrame
     summary = pd.DataFrame(results)
 
-    # 5. Save processed results
     output_path = Path(output_path)
 
     output_path.parent.mkdir(
@@ -130,13 +149,17 @@ def process_benchmark_data(input_path, output_path):
         exist_ok=True
     )
 
-    summary.to_csv(output_path, index=False)
+    summary.to_csv(
+        output_path,
+        index=False
+    )
 
-    print("Data processing completed.")
-    print("\nStatistical Summary:")
-    print(summary.to_string(index=False))
+    print("Statistical analysis completed.")
+    print("\nResults:")
 
-    print(f"\nSaved to: {output_path}")
+    print(summary.round(3).to_string(index=False))
+
+    print("\nSaved to:", output_path)
 
     return summary
 
@@ -149,4 +172,7 @@ if __name__ == "__main__":
         ROOT / "data" / "processed" / "metrics_summary.csv"
     )
 
-    process_benchmark_data(input_path, output_path)
+    process_benchmark_data(
+        input_path,
+        output_path
+    )
