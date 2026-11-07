@@ -14,4 +14,5 @@ benchmark_params:
   metric_target: "transaction_amount"
 
 logging:
+  raw_output_file: "data/raw/test_run.jsonl"
   output_file: "benchmark_results.log"
