@@ -1,10 +1,15 @@
 
 import os
+import json
 import time
 import tracemalloc
-import statistics
 import yaml
 import pandas as pd
+
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def baseline_method(df, category, metric):
@@ -28,47 +33,60 @@ def optimized_method(df, category, metric):
     return result.reset_index()
 
 
-def measure(method, df, category, metric, iterations):
-    times = []
-    peak_memory = 0
+def measure(method, df, category, metric, phase, iteration):
+    tracemalloc.start()
 
-    for _ in range(iterations):
-        tracemalloc.start()
+    start = time.perf_counter()
 
-        try:
-            start = time.perf_counter()
-            result = method(df, category, metric)
-            elapsed = (time.perf_counter() - start) * 1000
+    try:
+        method(df, category, metric)
 
-            current, peak = tracemalloc.get_traced_memory()
+        elapsed = (time.perf_counter() - start) * 1000
 
-            times.append(elapsed)
-            peak_memory = max(peak_memory, peak)
+        current, peak = tracemalloc.get_traced_memory()
 
-        finally:
-            tracemalloc.stop()
+        return {
+            "phase": phase,
+            "iteration": iteration,
+            "latency_ms": elapsed,
+            "throughput_rps": 1000 / elapsed if elapsed > 0 else 0,
+            "peak_memory_mb": peak / (1024 * 1024),
+            "success": True,
+            "error": None
+        }
 
-    return {
-        "mean_ms": statistics.mean(times),
-        "median_ms": statistics.median(times),
-        "peak_memory_mb": peak_memory / (1024 * 1024),
-        "result": result
-    }
+    except Exception as e:
+        elapsed = (time.perf_counter() - start) * 1000
+
+        current, peak = tracemalloc.get_traced_memory()
+
+        return {
+            "phase": phase,
+            "iteration": iteration,
+            "latency_ms": None,
+            "throughput_rps": 0,
+            "peak_memory_mb": peak / (1024 * 1024),
+            "success": False,
+            "error": str(e)
+        }
+
+    finally:
+        tracemalloc.stop()
 
 
 def run_benchmark():
-    config_path = "configs/config.yaml"
 
-    if not os.path.isfile(config_path):
-        raise FileNotFoundError(
-            f"Config file not found: {config_path}"
-        )
+    config_path = ROOT / "configs" / "config.yaml"
 
     with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    data_path = config["input_data"]["sample_path"]
-    encoding = config["input_data"]["encoding"]
+    data_path = ROOT / config["input_data"]["sample_path"]
+
+    df = pd.read_csv(
+        data_path,
+        encoding=config["input_data"]["encoding"]
+    )
 
     category = config["benchmark_params"]["aggregation_target"]
     metric = config["benchmark_params"]["metric_target"]
@@ -76,108 +94,74 @@ def run_benchmark():
     iterations = config["benchmark_params"]["iterations"]
     warmups = config["benchmark_params"]["warmup_runs"]
 
-    output_file = config["logging"]["output_file"]
+    raw_path = ROOT / config["logging"]["raw_output_file"]
 
-    if iterations < 1 or warmups < 0:
-        raise ValueError(
-            "Iterations must be positive and warmups non-negative"
-        )
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if not os.path.isfile(data_path):
-        raise FileNotFoundError(
-            f"Data file not found: {data_path}"
-        )
-
-    df = pd.read_csv(data_path, encoding=encoding)
-
+    # Check input data
     if df.empty:
-        raise ValueError("The CSV file contains no data")
+        raise ValueError("Input dataset is empty")
 
     if category not in df.columns or metric not in df.columns:
-        raise ValueError(
-            f"Required columns are missing: {category}, {metric}"
-        )
-
-    if not pd.api.types.is_numeric_dtype(df[metric]):
-        raise ValueError(
-            f"Column '{metric}' must contain numeric data"
-        )
+        raise ValueError("Required columns are missing")
 
     if df[category].isna().any() or df[metric].isna().any():
-        raise ValueError(
-            "The category and metric columns must not contain missing values"
-        )
+        raise ValueError("Missing values found")
 
-    for method in [baseline_method, optimized_method]:
-        for _ in range(warmups):
-            method(df, category, metric)
+    if not pd.api.types.is_numeric_dtype(df[metric]):
+        raise ValueError("Metric column must be numeric")
 
-    baseline = measure(
-        baseline_method, df, category, metric, iterations
-    )
+    methods = {
+        "Pandas": baseline_method,
+        "Optimized": optimized_method
+    }
 
-    optimized = measure(
-        optimized_method, df, category, metric, iterations
-    )
-
-    baseline_result = (
-        baseline["result"]
-        .sort_values(category)
-        .reset_index(drop=True)
-    )
-
-    optimized_result = (
-        optimized["result"]
-        .sort_values(category)
-        .reset_index(drop=True)
-    )
+    # Check that both methods return equal results
+    baseline_result = baseline_method(df, category, metric)
+    optimized_result = optimized_method(df, category, metric)
 
     pd.testing.assert_frame_equal(
-        baseline_result,
-        optimized_result,
+        baseline_result.sort_values(category).reset_index(drop=True),
+        optimized_result.sort_values(category).reset_index(drop=True),
         check_dtype=False,
         check_exact=False,
         rtol=1e-9,
         atol=1e-9
     )
 
-    if optimized["mean_ms"] > 0:
-        speedup = baseline["mean_ms"] / optimized["mean_ms"]
-    else:
-        speedup = 0
+    records = []
 
-    summary = f"""
-BENCHMARK RESULTS
-=================
-Experiment: {config['experiment']['name']}
-Version: {config['experiment']['version']}
-Rows processed: {len(df)}
-Iterations: {iterations}
-Warm-up runs: {warmups}
+    for method_name, method in methods.items():
 
-BASELINE
-Mean latency: {baseline['mean_ms']:.6f} ms
-Median latency: {baseline['median_ms']:.6f} ms
-Peak Python memory: {baseline['peak_memory_mb']:.6f} MB
+        # Warm-up phase
+        for i in range(warmups):
+            record = measure(
+                method, df, category, metric, "warmup", i + 1
+            )
 
-OPTIMIZED
-Mean latency: {optimized['mean_ms']:.6f} ms
-Median latency: {optimized['median_ms']:.6f} ms
-Peak Python memory: {optimized['peak_memory_mb']:.6f} MB
+            record["method"] = method_name
+            records.append(record)
 
-Speedup: {speedup:.4f}x
-Results match: YES
-"""
+        # Evaluation phase
+        for i in range(iterations):
+            record = measure(
+                method, df, category, metric, "evaluation", i + 1
+            )
 
-    print(summary)
+            record["method"] = method_name
+            records.append(record)
 
-    output_dir = os.path.dirname(output_file)
+    # Save all raw measurements
+    with open(raw_path, "w", encoding="utf-8") as f:
+        for record in records:
+            f.write(json.dumps(record) + "\n")
 
-    if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(summary)
+    print("Benchmark completed successfully.")
+    print(f"Dataset rows: {len(df)}")
+    print(f"Warm-up runs per method: {warmups}")
+    print(f"Evaluation runs per method: {iterations}")
+    print(f"Total measurements: {len(records)}")
+    print(f"Raw results saved to: {raw_path}")
 
 
 if __name__ == "__main__":
