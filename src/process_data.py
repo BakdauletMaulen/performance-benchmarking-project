@@ -1,214 +1,154 @@
-
-import json
 import pandas as pd
-import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
+sns.set_theme(style="whitegrid")
 
-def bootstrap_ci(values, confidence=0.95, n_boot=2000):
+PALETTE = sns.color_palette("colorblind")
 
-    values = np.asarray(values, dtype=float)
 
-    if len(values) < 2:
-        return np.nan, np.nan
+def generate_plots(summary_csv_path, raw_jsonl_path, output_dir):
 
-    rng = np.random.default_rng(42)
+    # Read processed and raw data
+    summary = pd.read_csv(summary_csv_path)
 
-    bootstrap_medians = []
+    raw = pd.read_json(raw_jsonl_path, lines=True)
 
-    for _ in range(n_boot):
-        sample = rng.choice(
-            values,
-            size=len(values),
-            replace=True
-        )
+    # Keep only successful evaluation measurements
+    raw = raw[
+        (raw["phase"] == "evaluation") &
+        (raw["success"] == True)
+    ].copy()
 
-        bootstrap_medians.append(np.median(sample))
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    alpha = 1 - confidence
+    methods = summary["method"].tolist()
 
-    lower = np.percentile(
-        bootstrap_medians,
-        alpha / 2 * 100
+    # -----------------------------------
+    # FIGURE 1: Latency comparison with 95% CI
+    # -----------------------------------
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    x_positions = range(len(methods))
+
+    medians = summary["latency_median_ms"].values
+
+    lower_errors = (
+        medians - summary["median_ci_lower_ms"].values
     )
 
-    upper = np.percentile(
-        bootstrap_medians,
-        (1 - alpha / 2) * 100
+    upper_errors = (
+        summary["median_ci_upper_ms"].values - medians
     )
 
-    return lower, upper
-
-
-def process_benchmark_data(input_path, output_path):
-
-    # 1. Read JSONL data
-    records = []
-
-    with open(input_path, "r", encoding="utf-8") as file:
-        for line in file:
-            if line.strip():
-                records.append(json.loads(line))
-
-    df = pd.DataFrame(records)
-
-    if df.empty:
-        raise ValueError("Raw benchmark file is empty")
-
-    required = [
-        "method",
-        "phase",
-        "latency_ms",
-        "throughput_rps",
-        "peak_memory_mb",
-        "success"
-    ]
-
-    for column in required:
-        if column not in df.columns:
-            raise ValueError(f"Missing column: {column}")
-
-    # 2. Remove warm-up measurements
-    df = df[df["phase"] == "evaluation"].copy()
-
-    if df.empty:
-        raise ValueError("No evaluation measurements found")
-
-    # Convert numeric columns
-    numeric_columns = [
-        "latency_ms",
-        "throughput_rps",
-        "peak_memory_mb"
-    ]
-
-    for column in numeric_columns:
-        df[column] = pd.to_numeric(
-            df[column],
-            errors="coerce"
-        )
-
-    # Convert success values to Boolean
-    df["success"] = (
-        df["success"]
-        .astype(str)
-        .str.lower()
-        .isin(["true", "1", "yes"])
+    ax.errorbar(
+        x_positions,
+        medians,
+        yerr=[lower_errors, upper_errors],
+        fmt="o",
+        color=PALETTE[0],
+        ecolor=PALETTE[1],
+        capsize=7,
+        markersize=9,
+        elinewidth=2,
+        markeredgewidth=1.5
     )
 
-    results = []
+    ax.set_xticks(list(x_positions))
+    ax.set_xticklabels(methods)
 
-    # 3. Calculate statistics for each method
-    for method, group in df.groupby("method"):
-
-        total_runs = len(group)
-
-        failed_runs = (~group["success"]).sum()
-
-        error_rate = failed_runs / total_runs * 100
-
-        # Use successful measurements
-        valid = group[group["success"]].dropna(
-            subset=numeric_columns
-        )
-
-        if valid.empty:
-            raise ValueError(
-                f"No valid measurements for {method}"
-            )
-
-        latency = valid["latency_ms"].to_numpy()
-
-        ci_lower, ci_upper = bootstrap_ci(latency)
-
-        results.append({
-            "method": method,
-            "observations": len(valid),
-
-            "latency_mean_ms": np.mean(latency),
-            "latency_median_ms": np.median(latency),
-            "latency_std_ms": np.std(latency, ddof=1)
-                if len(latency) > 1 else np.nan,
-
-            "latency_p95_ms": np.percentile(latency, 95),
-            "latency_p99_ms": np.percentile(latency, 99),
-
-            "median_ci_lower_ms": ci_lower,
-            "median_ci_upper_ms": ci_upper,
-
-            "throughput_mean_rps": valid["throughput_rps"].mean(),
-            "memory_mean_mb": valid["peak_memory_mb"].mean(),
-
-            "error_rate_pct": error_rate
-        })
-
-    # 4. Create summary table
-    summary = pd.DataFrame(results)
-
-    # 5. Calculate speedup
-    summary["speedup_vs_baseline"] = np.nan
-
-    baseline = summary[
-        summary["method"] == "baseline_method"
-    ]
-
-    optimized = summary[
-        summary["method"] == "optimized_method"
-    ]
-
-    if not baseline.empty and not optimized.empty:
-
-        baseline_latency = baseline[
-            "latency_median_ms"
-        ].iloc[0]
-
-        optimized_latency = optimized[
-            "latency_median_ms"
-        ].iloc[0]
-
-        summary.loc[
-            summary["method"] == "baseline_method",
-            "speedup_vs_baseline"
-        ] = 1.0
-
-        if optimized_latency > 0:
-            summary.loc[
-                summary["method"] == "optimized_method",
-                "speedup_vs_baseline"
-            ] = baseline_latency / optimized_latency
-
-    # 6. Save CSV
-    output_path = Path(output_path)
-
-    output_path.parent.mkdir(
-        parents=True,
-        exist_ok=True
+    ax.set_title(
+        "Execution Latency Comparison with 95% CI"
     )
 
-    summary.to_csv(
-        output_path,
-        index=False,
-        float_format="%.4f"
+    ax.set_xlabel("Processing Method")
+    ax.set_ylabel("Median Latency (ms)")
+
+    ax.grid(
+        True,
+        linestyle="--",
+        alpha=0.5
     )
 
-    print("Data processing completed successfully!")
-    print("\nStatistical Summary:")
-    print(summary.to_string(index=False))
+    fig.tight_layout()
 
-    print(f"\nResults saved to: {output_path}")
+    fig.savefig(
+        output_dir / "fig1_latency_comparison.png",
+        dpi=300,
+        bbox_inches="tight"
+    )
 
-    return summary
+    fig.savefig(
+        output_dir / "fig1_latency_comparison.pdf",
+        bbox_inches="tight"
+    )
+
+    plt.show()
+    plt.close(fig)
+
+    # -----------------------------------
+    # FIGURE 2: Latency Distribution Boxplot
+    # -----------------------------------
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    sns.boxplot(
+        data=raw,
+        x="method",
+        y="latency_ms",
+        hue="method",
+        palette=PALETTE,
+        dodge=False,
+        showfliers=True,
+        legend=False,
+        ax=ax
+    )
+
+    ax.set_title(
+        "Latency Distribution by Processing Method"
+    )
+
+    ax.set_xlabel("Processing Method")
+    ax.set_ylabel("Latency (ms)")
+
+    ax.grid(
+        True,
+        axis="y",
+        linestyle="--",
+        alpha=0.5
+    )
+
+    fig.tight_layout()
+
+    fig.savefig(
+        output_dir / "fig2_distribution_boxplot.png",
+        dpi=300,
+        bbox_inches="tight"
+    )
+
+    fig.savefig(
+        output_dir / "fig2_distribution_boxplot.pdf",
+        bbox_inches="tight"
+    )
+
+    plt.show()
+    plt.close(fig)
+
+    print("Both figures generated successfully!")
+    print(f"Figures saved to: {output_dir}")
 
 
 if __name__ == "__main__":
 
-    input_path = ROOT / "data" / "raw" / "test_run.jsonl"
-
-    output_path = (
-        ROOT / "data" / "processed" / "metrics_summary.csv"
+    generate_plots(
+        ROOT / "data" / "processed" / "metrics_summary.csv",
+        ROOT / "data" / "raw" / "test_run.jsonl",
+        ROOT / "reports" / "figures"
     )
-
-    process_benchmark_data(input_path, output_path)
