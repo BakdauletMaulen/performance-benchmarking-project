@@ -1,11 +1,10 @@
-
 # Quantitative Benchmark Analysis of Data Processing Pipelines
 
 ## Research Metadata
 
 - **Project Title:** Performance Benchmarking of Data Processing Algorithms
 - **Author:** Bakdaulet Maulen
-- **Repository:** https://github.com/TilderCourse2025/performance-benchmarking-project
+- **Repository:** https://github.com/BakdauletMaulen/performance-benchmarking-project
 
 ## Abstract
 
@@ -30,10 +29,8 @@ performance-benchmarking-project/
 ├── data/
 │   ├── raw/
 │   │   └── test_run.jsonl
-│   │
 │   ├── processed/
 │   │   └── metrics_summary.csv
-│   │
 │   └── sample/
 │       └── test_data.csv
 │
@@ -231,6 +228,7 @@ The notebook performs statistical analysis and generates the corresponding figur
 ## License
 
 This project is distributed under the MIT License.
+
 ## System Requirements
 
 - Python 3.10 or later
@@ -276,5 +274,3 @@ For statistical analysis, open `notebooks/01_data_analysis.ipynb` in Jupyter Not
 ## Citation
 
 Maulen, B. (2026). *Performance Benchmarking of Data Processing Algorithms*. GitHub repository: https://github.com/BakdauletMaulen/performance-benchmarking-project
-
-
