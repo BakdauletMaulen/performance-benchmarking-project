@@ -231,3 +231,50 @@ The notebook performs statistical analysis and generates the corresponding figur
 ## License
 
 This project is distributed under the MIT License.
+## System Requirements
+
+- Python 3.10 or later
+- pip package manager
+- Windows, Linux, or macOS
+- Dependencies listed in `requirements.txt`
+
+## Quickstart
+
+Clone the repository:
+
+```bash
+git clone https://github.com/BakdauletMaulen/performance-benchmarking-project.git
+cd performance-benchmarking-project
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run the benchmark:
+
+```bash
+python src/benchmark.py
+```
+
+Process benchmark data:
+
+```bash
+python src/process_data.py
+```
+
+Generate visualizations:
+
+```bash
+python src/visualize.py
+```
+
+For statistical analysis, open `notebooks/01_data_analysis.ipynb` in Jupyter Notebook and run all cells.
+
+## Citation
+
+Maulen, B. (2026). *Performance Benchmarking of Data Processing Algorithms*. GitHub repository: https://github.com/BakdauletMaulen/performance-benchmarking-project
+
+
